@@ -1,0 +1,21 @@
+# Feast Feature Store Configuration for MLOps Dual Model System
+# This configuration defines the offline and online stores for feature management
+
+project: mlops_dual_model
+registry: gs://mlops-dev-metadata-store/feast/registry.db
+provider: gcp
+
+offline_store:
+  type: bigquery
+  project_id: YOUR_GCP_PROJECT_ID  # Replace with your GCP project ID
+  dataset_id: mlops_dev
+  location: us-central1
+
+online_store:
+  type: redis
+  connection_string: redis_host:redis_port
+
+entity_key_serialization_version: 2
+
+# Feature views will be defined in separate Python files
+# See: feature_views/covid_features.py and feature_views/churn_features.py

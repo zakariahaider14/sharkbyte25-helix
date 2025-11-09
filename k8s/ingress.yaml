@@ -1,0 +1,72 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mlops-ingress
+  namespace: mlops
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "mlops-ip"
+    networking.gke.io/managed-certificates: "mlops-cert"
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  rules:
+  - host: "mlops.example.com"
+    http:
+      paths:
+      - path: /covid/*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: covid-prediction-service
+            port:
+              number: 8000
+      - path: /churn/*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: churn-prediction-service
+            port:
+              number: 8001
+      - path: /health/*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: covid-prediction-service
+            port:
+              number: 8000
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: mlops-cert
+  namespace: mlops
+spec:
+  domains:
+  - mlops.example.com
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeBackendService
+metadata:
+  name: mlops-backend-service
+  namespace: mlops
+spec:
+  loadBalancingScheme: EXTERNAL
+  protocol: HTTP
+  healthChecks:
+  - name: mlops-health-check
+  sessionAffinity: NONE
+  timeoutSec: 30
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeHealthCheck
+metadata:
+  name: mlops-health-check
+  namespace: mlops
+spec:
+  checkIntervalSec: 10
+  timeoutSec: 5
+  healthyThreshold: 2
+  unhealthyThreshold: 3
+  httpHealthCheck:
+    port: 8000
+    requestPath: /health

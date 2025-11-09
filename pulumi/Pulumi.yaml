@@ -1,0 +1,3 @@
+name: mlops-dual-model
+runtime: python
+description: MLOps infrastructure for dual-model inference (COVID-19 and Telco Churn) on GCP

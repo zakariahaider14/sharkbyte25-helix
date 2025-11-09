@@ -1,0 +1,165 @@
+# Prometheus Alert Rules for MLOps Dual Model System
+
+groups:
+  - name: mlops_alerts
+    interval: 30s
+    rules:
+      # COVID-19 Service Alerts
+      - alert: CovidServiceDown
+        expr: up{job="covid-prediction-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: covid-prediction
+        annotations:
+          summary: "COVID-19 Prediction Service is down"
+          description: "The COVID-19 prediction service has been unavailable for more than 2 minutes"
+
+      - alert: CovidServiceHighLatency
+        expr: histogram_quantile(0.95, covid_prediction_latency_seconds) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          service: covid-prediction
+        annotations:
+          summary: "COVID-19 Service has high latency"
+          description: "95th percentile latency is above 1 second"
+
+      - alert: CovidServiceHighErrorRate
+        expr: rate(covid_prediction_errors_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: covid-prediction
+        annotations:
+          summary: "COVID-19 Service has high error rate"
+          description: "Error rate is above 5% in the last 5 minutes"
+
+      # Telco Churn Service Alerts
+      - alert: ChurnServiceDown
+        expr: up{job="churn-prediction-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: churn-prediction
+        annotations:
+          summary: "Churn Prediction Service is down"
+          description: "The churn prediction service has been unavailable for more than 2 minutes"
+
+      - alert: ChurnServiceHighLatency
+        expr: histogram_quantile(0.95, churn_prediction_latency_seconds) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          service: churn-prediction
+        annotations:
+          summary: "Churn Service has high latency"
+          description: "95th percentile latency is above 1 second"
+
+      - alert: ChurnServiceHighErrorRate
+        expr: rate(churn_prediction_errors_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: churn-prediction
+        annotations:
+          summary: "Churn Service has high error rate"
+          description: "Error rate is above 5% in the last 5 minutes"
+
+      # Kubernetes Alerts
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[1h]) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod is crash looping"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping"
+
+      - alert: PodNotHealthy
+        expr: min_over_time(sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown|Failed"})[15m:1m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod is not healthy"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is not healthy"
+
+      - alert: ContainerOomKiller
+        expr: kube_pod_container_status_restarts_total - kube_pod_container_status_restarts_total offset 10m >= 1 and ignoring (reason) min_over_time(kube_pod_container_last_terminated_reason{reason="OOMKilled"}[10m]) == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container was OOMKilled"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} was OOMKilled"
+
+      # Node Alerts
+      - alert: NodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node is not ready"
+          description: "Node {{ $labels.node }} is not ready"
+
+      - alert: NodeHighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node has high memory usage"
+          description: "Node {{ $labels.node }} memory usage is above 85%"
+
+      - alert: NodeHighCpuUsage
+        expr: (100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node has high CPU usage"
+          description: "Node {{ $labels.instance }} CPU usage is above 80%"
+
+      # Data Quality Alerts
+      - alert: ModelDataDrift
+        expr: abs(rate(model_prediction_distribution_change[1h])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          type: data_drift
+        annotations:
+          summary: "Model data drift detected"
+          description: "Prediction distribution has changed significantly"
+
+      - alert: FeatureStoreLag
+        expr: feature_store_sync_lag_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+          type: feature_store
+        annotations:
+          summary: "Feature store synchronization lag"
+          description: "Feature store is lagging by more than 5 minutes"
+
+      # Model Performance Alerts
+      - alert: ModelAccuracyDegradation
+        expr: rate(model_accuracy[1h]) < 0.80
+        for: 30m
+        labels:
+          severity: warning
+          type: model_performance
+        annotations:
+          summary: "Model accuracy has degraded"
+          description: "Model accuracy is below 80%"
+
+      - alert: ModelPredictionAnomalies
+        expr: rate(model_anomalous_predictions_total[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          type: model_performance
+        annotations:
+          summary: "Unusual prediction patterns detected"
+          description: "Anomalous predictions are above 10% of total predictions"

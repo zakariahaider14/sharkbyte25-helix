@@ -1,0 +1,10 @@
+#!/bin/sh
+'''exec' "/Users/mohammadzakariahaider/Library/CloudStorage/OneDrive-Personal/PHD_2023_28/1. Fall 25/EEL_6905_Individual_Study/Week-11 (PESGM)/ShartByte/gemini_agentic_application/sharkbyte/bin/python3" "$0" "$@"
+' '''
+# -*- coding: utf-8 -*-
+import re
+import sys
+from feast.cli.cli import cli
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(cli())
