@@ -29,6 +29,8 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    # Disabled: No tests directory yet
+    if: false  # Enable when tests/ directory is created
     
     steps:
       - name: Checkout code
@@ -74,7 +76,7 @@ jobs:
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: test
+    # Removed 'needs: test' since test job is disabled
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     
     steps:
@@ -124,13 +126,14 @@ jobs:
           docker push ${{ env.ARTIFACT_REGISTRY }}/helix-frontend:latest
 
   # ============================================================================
-  # JOB 3: Deploy with Pulumi
+  # JOB 3: Deploy with Pulumi (Incremental Updates)
   # ============================================================================
   deploy:
-    name: Deploy Infrastructure
+    name: Deploy Infrastructure (Incremental)
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Manual trigger only - safe incremental updates
+    if: github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout code
