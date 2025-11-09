@@ -99,7 +99,7 @@ jspm_packages/
 .out
 .storybook-out
 
-.csv
+*.csv
 
 
 # Temporary folders
