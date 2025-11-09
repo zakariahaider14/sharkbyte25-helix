@@ -13,9 +13,19 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import sys
+import os
+import tempfile
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
+
+# GCS imports
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+    print("⚠️  Google Cloud Storage not available")
 
 # Feast imports
 try:
@@ -31,12 +41,54 @@ app = FastAPI(title="Churn Prediction Service (Real)")
 MODEL_DIR = Path(__file__).parent.parent / "ml_models" / "saved_models"
 FEAST_DIR = Path(__file__).parent.parent / "feast_store"
 
+# GCS Configuration
+GCS_BUCKET = os.getenv('GCS_BUCKET', '')
+PROJECT_ID = os.getenv('PROJECT_ID', '')
+MODEL_PATH = os.getenv('MODEL_PATH', '/tmp/churn_model.joblib')
+
+def download_model_from_gcs():
+    """Download model from GCS if available"""
+    if not GCS_AVAILABLE or not GCS_BUCKET:
+        return None
+    
+    try:
+        storage_client = storage.Client(project=PROJECT_ID)
+        bucket = storage_client.bucket(GCS_BUCKET)
+        
+        # Download model
+        model_blob = bucket.blob('churn/v1.0/churn_model.joblib')
+        model_blob.download_to_filename(MODEL_PATH)
+        print(f"✅ Downloaded model from gs://{GCS_BUCKET}/churn/v1.0/churn_model.joblib")
+        
+        return joblib.load(MODEL_PATH)
+    except Exception as e:
+        print(f"❌ Error downloading model from GCS: {e}")
+        return None
+
 # Load model and metadata
 try:
-    model = joblib.load(MODEL_DIR / "churn_model.joblib")
-    metadata = joblib.load(MODEL_DIR / "churn_model_metadata.joblib")
-    feature_cols = metadata['feature_columns']
-    print(f"✅ Loaded Churn model (v{metadata['version']})")
+    # Try to load from GCS first
+    model = download_model_from_gcs()
+    
+    # Fallback to local if GCS fails
+    if model is None and (MODEL_DIR / "churn_model.joblib").exists():
+        model = joblib.load(MODEL_DIR / "churn_model.joblib")
+        print(f"✅ Loaded Churn model from local storage")
+    
+    # For now, use default feature columns (will be improved)
+    feature_cols = [
+        'SeniorCitizen', 'Partner', 'Dependents', 'tenure', 'PhoneService',
+        'MultipleLines', 'OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
+        'TechSupport', 'StreamingTV', 'StreamingMovies', 'PaperlessBilling',
+        'MonthlyCharges', 'TotalCharges', 'gender_encoded', 'Contract_encoded',
+        'PaymentMethod_encoded', 'InternetService_encoded'
+    ]
+    metadata = {'version': '1.0', 'feature_columns': feature_cols}
+    
+    if model is not None:
+        print(f"✅ Churn model loaded successfully")
+    else:
+        print("⚠️  No model loaded, will return errors on prediction")
 except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None

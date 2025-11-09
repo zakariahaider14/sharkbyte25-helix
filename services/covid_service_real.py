@@ -13,9 +13,19 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import sys
+import os
+import tempfile
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
+
+# GCS imports
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+    print("⚠️  Google Cloud Storage not available")
 
 # Feast imports
 try:
@@ -31,13 +41,52 @@ app = FastAPI(title="COVID-19 Prediction Service (Real)")
 MODEL_DIR = Path(__file__).parent.parent / "ml_models" / "saved_models"
 FEAST_DIR = Path(__file__).parent.parent / "feast_store"
 
+# GCS Configuration
+GCS_BUCKET = os.getenv('GCS_BUCKET', '')
+PROJECT_ID = os.getenv('PROJECT_ID', '')
+MODEL_PATH = os.getenv('MODEL_PATH', '/tmp/covid_model.joblib')
+
+def download_model_from_gcs():
+    """Download model from GCS if available"""
+    if not GCS_AVAILABLE or not GCS_BUCKET:
+        return None
+    
+    try:
+        storage_client = storage.Client(project=PROJECT_ID)
+        bucket = storage_client.bucket(GCS_BUCKET)
+        
+        # Download model
+        model_blob = bucket.blob('covid/v1.0/covid_model.joblib')
+        model_blob.download_to_filename(MODEL_PATH)
+        print(f"✅ Downloaded model from gs://{GCS_BUCKET}/covid/v1.0/covid_model.joblib")
+        
+        return joblib.load(MODEL_PATH)
+    except Exception as e:
+        print(f"❌ Error downloading model from GCS: {e}")
+        return None
+
 # Load model and metadata
 try:
-    model = joblib.load(MODEL_DIR / "covid_model.joblib")
-    metadata = joblib.load(MODEL_DIR / "covid_model_metadata.joblib")
-    feature_cols = metadata['feature_columns']
-    label_encoder = metadata['label_encoder']
-    print(f"✅ Loaded COVID model (v{metadata['version']})")
+    # Try to load from GCS first
+    model = download_model_from_gcs()
+    
+    # Fallback to local if GCS fails
+    if model is None and (MODEL_DIR / "covid_model.joblib").exists():
+        model = joblib.load(MODEL_DIR / "covid_model.joblib")
+        print(f"✅ Loaded COVID model from local storage")
+    
+    # For now, use default feature columns (will be improved)
+    feature_cols = [
+        'confirmed_cases', 'deaths', 'recovered', 'active_cases',
+        'death_rate', 'recovery_rate', 'risk_score'
+    ]
+    label_encoder = None
+    metadata = {'version': '1.0', 'feature_columns': feature_cols}
+    
+    if model is not None:
+        print(f"✅ COVID model loaded successfully")
+    else:
+        print("⚠️  No model loaded, will return errors on prediction")
 except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
@@ -183,8 +232,14 @@ def predict_covid(request: CovidPredictionRequest):
         prediction_proba = model.predict_proba(feature_df)[0]
         
         # Decode prediction
-        risk_level = label_encoder.inverse_transform([prediction_encoded])[0]
-        confidence = float(prediction_proba[prediction_encoded])
+        if label_encoder is not None:
+            risk_level = label_encoder.inverse_transform([prediction_encoded])[0]
+        else:
+            # Map prediction to risk level directly
+            risk_levels = ['LOW', 'MEDIUM', 'HIGH']
+            risk_level = risk_levels[int(prediction_encoded)] if int(prediction_encoded) < len(risk_levels) else 'UNKNOWN'
+        
+        confidence = float(prediction_proba[int(prediction_encoded)])
         
         # Generate explanation
         using_defaults = not request.confirmed_cases and feature_source != "feast"

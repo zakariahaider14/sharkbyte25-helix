@@ -82,7 +82,7 @@ async function extractCovidParameters(query: string): Promise<Record<string, unk
       messages: [
         {
           role: 'system',
-          content: 'You are a data extraction assistant. Extract COVID-19 prediction parameters from user queries. Return only valid JSON.',
+          content: 'You are a data extraction assistant. Extract COVID-19 prediction parameters from user queries. Return only valid JSON. ALWAYS extract country names even if mentioned informally (e.g., "United States", "USA", "America" → "USA").',
         },
         {
           role: 'user',
@@ -90,7 +90,7 @@ async function extractCovidParameters(query: string): Promise<Record<string, unk
           
           Return a JSON object with these fields (use null for missing values):
           {
-            "country_name": "country name",
+            "country_name": "country name (REQUIRED - extract from query even if informal)",
             "confirmed_cases": "number or null",
             "deaths": "number or null",
             "recovered": "number or null",
@@ -98,6 +98,11 @@ async function extractCovidParameters(query: string): Promise<Record<string, unk
             "vaccination_rate": "decimal 0-1 or null",
             "testing_rate": "number or null"
           }
+          
+          Examples:
+          - "COVID in USA" → {"country_name": "USA"}
+          - "What's the situation in India?" → {"country_name": "India"}
+          - "United States COVID" → {"country_name": "USA"}
           
           Only return the JSON object, no other text.`,
         },
@@ -107,10 +112,22 @@ async function extractCovidParameters(query: string): Promise<Record<string, unk
     const messageContent = response.choices?.[0]?.message?.content;
     const content = typeof messageContent === 'string' ? messageContent : '{}';
     const cleanedContent = cleanJsonResponse(content);
-    return JSON.parse(cleanedContent);
+    const params = JSON.parse(cleanedContent);
+    
+    // Fallback: Try to extract country from query using simple pattern matching
+    if (!params.country_name || params.country_name === 'null') {
+      const countryMatch = query.match(/\b(USA|US|United States|America|India|China|Brazil|UK|United Kingdom|Canada|Australia|Germany|France|Italy|Spain|Japan|Russia)\b/i);
+      if (countryMatch) {
+        params.country_name = countryMatch[1];
+      }
+    }
+    
+    return params;
   } catch (error) {
     console.error('Error extracting COVID parameters:', error);
-    return {};
+    // Try simple pattern matching as fallback
+    const countryMatch = query.match(/\b(USA|US|United States|America|India|China|Brazil|UK|United Kingdom|Canada|Australia|Germany|France|Italy|Spain|Japan|Russia)\b/i);
+    return countryMatch ? { country_name: countryMatch[1] } : {};
   }
 }
 
@@ -123,7 +140,7 @@ async function extractChurnParameters(query: string): Promise<Record<string, unk
       messages: [
         {
           role: 'system',
-          content: 'You are a data extraction assistant. Extract customer churn prediction parameters from user queries. Return only valid JSON.',
+          content: 'You are a data extraction assistant. Extract customer churn prediction parameters from user queries. Return only valid JSON. Extract numbers even if mentioned informally.',
         },
         {
           role: 'user',
@@ -143,6 +160,11 @@ async function extractChurnParameters(query: string): Promise<Record<string, unk
             "support_tickets_count": "number or null"
           }
           
+          Examples:
+          - "customer with 24 months tenure" → {"tenure_months": 24}
+          - "paying $85 monthly" → {"monthly_charges": 85}
+          - "12 month customer" → {"tenure_months": 12}
+          
           Only return the JSON object, no other text.`,
         },
       ],
@@ -151,10 +173,37 @@ async function extractChurnParameters(query: string): Promise<Record<string, unk
     const messageContent = response.choices?.[0]?.message?.content;
     const content = typeof messageContent === 'string' ? messageContent : '{}';
     const cleanedContent = cleanJsonResponse(content);
-    return JSON.parse(cleanedContent);
+    const params = JSON.parse(cleanedContent);
+    
+    // Fallback: Try to extract numbers from query using pattern matching
+    if (!params.tenure_months) {
+      const tenureMatch = query.match(/(\d+)\s*(month|months|mo)/i);
+      if (tenureMatch) {
+        params.tenure_months = parseInt(tenureMatch[1]);
+      }
+    }
+    
+    if (!params.monthly_charges) {
+      const chargesMatch = query.match(/\$?(\d+(?:\.\d+)?)\s*(monthly|per month|\/month)?/i);
+      if (chargesMatch) {
+        params.monthly_charges = parseFloat(chargesMatch[1]);
+      }
+    }
+    
+    return params;
   } catch (error) {
     console.error('Error extracting Churn parameters:', error);
-    return {};
+    // Try simple pattern matching as fallback
+    const params: Record<string, unknown> = {};
+    const tenureMatch = query.match(/(\d+)\s*(month|months|mo)/i);
+    if (tenureMatch) {
+      params.tenure_months = parseInt(tenureMatch[1]);
+    }
+    const chargesMatch = query.match(/\$?(\d+(?:\.\d+)?)/);
+    if (chargesMatch) {
+      params.monthly_charges = parseFloat(chargesMatch[1]);
+    }
+    return params;
   }
 }
 
@@ -252,21 +301,31 @@ export const agentRouter = router({
       let parameters: Record<string, unknown>;
       if (intent === 'covid') {
         parameters = await extractCovidParameters(query);
-        if (!parameters || !('country_name' in parameters)) {
+        // COVID service can work with minimal information (uses defaults)
+        if (!parameters || Object.keys(parameters).length === 0) {
           return {
-            response: 'I need more information about the country to make a COVID-19 prediction. Please provide country name and relevant statistics.',
+            response: 'I need at least some information to make a COVID-19 prediction. Please provide country name or case statistics.',
             intent: 'covid',
             confidence,
           };
         }
+        // If no country_name provided, use a default
+        if (!('country_name' in parameters)) {
+          parameters.country_name = 'Unknown';
+        }
       } else {
         parameters = await extractChurnParameters(query);
-        if (!parameters || !('customer_id' in parameters)) {
+        // Churn service can work with minimal information (generates defaults)
+        if (!parameters || Object.keys(parameters).length === 0) {
           return {
-            response: 'I need more information about the customer to assess churn risk. Please provide customer ID and relevant details.',
+            response: 'I need at least some information about the customer to assess churn risk. Please provide details like tenure, monthly charges, or contract type.',
             intent: 'churn',
             confidence,
           };
+        }
+        // If no customer_id provided, service will generate one
+        if (!('customer_id' in parameters)) {
+          parameters.customer_id = `GUEST_${Date.now()}`;
         }
       }
 

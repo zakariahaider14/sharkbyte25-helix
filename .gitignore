@@ -10,6 +10,7 @@ build/
 # Environment variables
 .kaggle/
 .env
+.env.gcp
 .env.example
 .env.local
 .env.development.local
