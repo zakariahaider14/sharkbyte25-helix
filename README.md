@@ -22,7 +22,7 @@ This guide walks through deploying the HELIX MLOps platform to Google Cloud Plat
 
 ## 🎯 Overview
 
-Phase 3 migrates HELIX from local development (Phase 2) to a production-ready GCP deployment with:
+This phase deploys HELIX to a production-ready GCP deployment with:
 
 - **Scalability**: Auto-scaling with GKE (Google Kubernetes Engine)
 - **Reliability**: Multi-zone deployment with 99.9% uptime SLA
