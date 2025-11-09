@@ -6,7 +6,7 @@
 dist/
 build/
 *.dist
-
+*.json
 # Environment variables
 .kaggle/
 .env

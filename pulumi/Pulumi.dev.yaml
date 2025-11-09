@@ -1,13 +1,14 @@
 config:
-  gcp:project: YOUR_GCP_PROJECT_ID
+  gcp:project: gen-lang-client-0520631489
   gcp:region: us-central1
   mlops:environment: dev
   mlops:cluster_name: mlops-gke-dev
-  mlops:cluster_version: 1.27
-  mlops:node_count: 3
+  mlops:cluster_version: "1.27"
+  mlops:node_count: "3"
   mlops:machine_type: n1-standard-2
   mlops:gcs_bucket_prefix: mlops-dev
   mlops:bigquery_dataset: mlops_dev
   mlops:redis_tier: basic
-  mlops:redis_size_gb: 2
+  mlops:redis_size_gb: "2"
   mlops:artifact_registry_repo: mlops-docker-dev
+encryptionsalt: v1:PyBtKXMEwlY=:v1:05meUgkQ/oVwWm2+:g/VTZF3Iv3sxH9Yn6nXLR4mly7sfCw==

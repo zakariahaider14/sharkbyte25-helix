@@ -1,0 +1,4 @@
+encryptionsalt: v1:hPGl2Y7d97A=:v1:TVR+f14l0gqIxLaq:B7fPP6zR3N92zqfWX5NWMxCWLL0LHw==
+config:
+  gcp:project: gen-lang-client-0520631489
+  gcp:region: us-central1
